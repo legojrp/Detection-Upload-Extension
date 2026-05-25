@@ -1,26 +1,275 @@
-All protected routes use Authorization: Bearer <token>. Login returns the token, and everything else uses that token to identify the user and enforce ownership.
+# API Integration Specification: Extension Team
 
-**Auth**
-- POST /auth/signin: create a new account. Send JSON with email, username, password. Returns 201 with status: created and user_id.
-- POST /auth/login: authenticate with JSON containing identifier and password. identifier can be username or email. Returns 200 with token and expires_at.
-- GET /auth/me: validate the current token and fetch the signed-in user. Returns 200 with user_id, email, username. Use this when the extension opens to confirm the session is still valid.
-- POST /auth/logout: revoke a token. Send the token in the Authorization header or as JSON { token }. Returns 200 when logged out, 404 if the token does not exist.
+All protected routes require an `Authorization: Bearer <token>` header. The `/auth/login` endpoint returns this token, which must be stored by the extension and used in all subsequent requests to identify the user and enforce data ownership.
 
-**Upload flow**
-- POST /upload/inspect: preflight helper for link-based uploads. Send JSON { source_url }. It returns platform hints such as platform, platform_domain, channel, channel_identifier, video_id, and upload_method. This is useful for auto-filling metadata before the user uploads.
-- POST /upload: upload the actual image, video, or audio file. Use multipart form-data with one file field named image, audio, or media, plus optional fields source_url, channel, platform_domain, channel_identifier, upload_method, posted_time, or time_posted. The current behavior is:
-  - if the file hash already exists, it short-circuits with 200 and exact_match details
-  - if it is a new upload, it returns 202 with status: accepted, job_id, media_id, and a message saying the upload was queued
-  - the extension should then poll /media/:id or /media/user to see when processing finishes
+---
 
-**Personal uploads**
-- GET /media/user: list the signed-in user’s uploads. Returns { media: [...] } with up to 100 items, ordered by upload_date descending. Each item includes id, filename, media_type, metadata fields like source_url and channel, and status, which is processing when embedding is still pending and ready otherwise.
-- GET /media/:id: fetch one upload’s metadata. This is the route to poll after POST /upload. Returns media_id, filename, media_type, and metadata fields. If the media node is not there yet, it returns 404 with media: null.
+## Authentication Endpoints (`/auth`)
 
-**Similarity and preview**
-- GET /media/:id/similar: get similar media for a given uploaded item. This is the route the extension should use to show “similar videos from this piece of media.” It returns { media_id, matches: [...] }. Each match can include similarity, raw_similarity, similarity_type, forensic_agreement, status, dimension_scores, and, for video targets, frame_match_seconds and frame_index.
-- GET /media/:id/get: stream the original media file for preview or playback. This returns binary content, not JSON.
-- GET /media/:id/get/:frame: stream a sampled frame from a video. This is useful for thumbnails or frame preview.
-- GET /images/:id/relationship/:other_id: fetch the stored relationship between two media items. This is not required for basic upload/search flows, but it is useful if the extension wants to show why two items are related. It returns raw_similarity, weight, forensic_agreement, rel_type, dimension_scores, media types, and frame indices when available.
+### POST /auth/signin
 
-If you want, I can turn this into a compact integration spec for the extension team, with example requests and response shapes in TypeScript.
+Create a new user account.
+
+* **Request Body (JSON):**
+
+```ts
+{
+  email: string;
+  username: string;
+  password: string;
+}
+
+```
+
+* **Response (201 Created):**
+
+```ts
+{
+  status: "created";
+  user_id: string;
+}
+
+```
+
+### POST /auth/login
+
+Authenticate a user and retrieve a session token.
+
+* **Request Body (JSON):**
+
+```ts
+{
+  identifier: string; // Can be username or email
+  password: string;
+}
+
+```
+
+* **Response (200 OK):**
+
+```ts
+{
+  token: string;
+  expires_at: string; // ISO timestamp
+}
+
+```
+
+### GET /auth/me
+
+Validate the active token and retrieve profile details. Use this endpoint when the extension initializes to verify if the current session is still valid.
+
+* **Response (200 OK):**
+
+```ts
+{
+  user_id: string;
+  email: string;
+  username: string;
+}
+
+```
+
+### POST /auth/logout
+
+Revoke the active session token.
+
+* **Request Headers / Body:**
+* Can accept the token via standard `Authorization: Bearer <token>` header, OR
+* Via JSON Body: `{ "token": string }`
+
+
+* **Response (200 OK):** Token successfully revoked.
+* **Response (404 Not Found):** Token does not exist or is already invalid.
+
+---
+
+## Upload Workflow (`/upload`)
+
+### POST /upload/inspect
+
+Preflight helper for URL/link-based processing. Analyzes a source link to extract platform metadata before the actual upload occurs. Use this to auto-fill metadata fields in the extension UI.
+
+* **Request Body (JSON):**
+
+```ts
+{
+  source_url: string;
+}
+
+```
+
+* **Response (200 OK):**
+
+```ts
+{
+  platform: string;
+  platform_domain: string;
+  channel: string;
+  channel_identifier: string;
+  video_id: string;
+  upload_method: string;
+}
+
+```
+
+### POST /upload
+
+Upload a raw media asset (image, video, or audio). This route handles deduplication automatically based on file hash.
+
+* **Request Payload:** `multipart/form-data`
+* `image` OR `audio` OR `media` (File binary, exactly one required)
+* `source_url` (String, optional)
+* `channel` (String, optional)
+* `platform_domain` (String, optional)
+* `channel_identifier` (String, optional)
+* `upload_method` (String, optional)
+* `posted_time` OR `time_posted` (String/Timestamp, optional)
+
+
+* **Scenario A: File hash already exists (De-duplication short-circuit)**
+* **Response (200 OK):**
+
+
+
+```ts
+{
+  status: "exact_match";
+  media_id: string;
+  filename: string;
+  metadata: Record<string, any>;
+}
+
+```
+
+* **Scenario B: New unique file upload (Queued for processing)**
+* **Response (202 Accepted):** The extension must begin polling `/media/:id` or `/media/user` to check when processing concludes.
+
+
+
+```ts
+{
+  status: "accepted";
+  message: string; // e.g., "Upload was queued"
+  job_id: string;
+  media_id: string;
+}
+
+```
+
+---
+
+## Personal Upload Management (`/media`)
+
+### GET /media/user
+
+List the authenticated user's uploaded assets. Returns up to 100 items, sorted by `upload_date` in descending order.
+
+* **Response (200 OK):**
+
+```ts
+{
+  media: Array<{
+    id: string;
+    filename: string;
+    media_type: "image" | "video" | "audio";
+    source_url: string | null;
+    channel: string | null;
+    status: "processing" | "ready"; // "processing" means vector embedding is pending
+  }>;
+}
+
+```
+
+### GET /media/:id
+
+Fetch the metadata of a specific upload. Use this route to poll after receiving a 202 status from `POST /upload`.
+
+* **Response (200 OK):** Item exists.
+
+```ts
+{
+  media_id: string;
+  filename: string;
+  media_type: "image" | "video" | "audio";
+  source_url: string | null;
+  channel: string | null;
+  platform_domain: string | null;
+  status: "processing" | "ready";
+}
+
+```
+
+* **Response (404 Not Found):** Media node is not generated yet.
+
+```ts
+{
+  media: null;
+}
+
+```
+
+---
+
+## Similarity, Previews, and Relationships
+
+### GET /media/:id/similar
+
+Retrieve items in the database matching or similar to the targeted upload. Use this endpoint to populate the extension UI's "similar content" panel.
+
+* **Response (200 OK):**
+
+```ts
+{
+  media_id: string;
+  matches: Array<{
+    id: string;
+    similarity: number;
+    raw_similarity: number;
+    similarity_type: string;
+    forensic_agreement: boolean;
+    status: string;
+    dimension_scores: Record<string, number>;
+    frame_match_seconds?: number; // Video targets only
+    frame_index?: number;         // Video targets only
+  }>;
+}
+
+```
+
+### GET /media/:id/get
+
+Streams the original media binary payload directly for inline player rendering or preview.
+
+* **Response (200 OK):** Binary stream content (`image/*`, `video/*`, `audio/*`). **Not JSON.**
+
+### GET /media/:id/get/:frame
+
+Streams a single sampled thumbnail frame from a target video asset.
+
+* **Response (200 OK):** Binary image stream.
+
+### GET /images/:id/relationship/:other_id
+
+Inspect detailed alignment data mapping why two distinct media nodes are marked as related. (Optional for basic features, but helpful for deep-dive UI insights).
+
+* **Response (200 OK):**
+
+```ts
+{
+  raw_similarity: number;
+  weight: number;
+  forensic_agreement: boolean;
+  rel_type: string;
+  dimension_scores: Record<string, number>;
+  media_types: {
+    source: string;
+    target: string;
+  };
+  frame_indices?: {
+    source_frame?: number;
+    target_frame?: number;
+  };
+}
+
+```
