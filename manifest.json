@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Detection Upload Extension",
+  "version": "0.1.0",
+  "description": "Cross-browser media forensics extension for discovery-time capture, audit metadata, and secure delivery stubs.",
+  "action": {
+    "default_title": "Cyber-Forensics Console",
+    "default_popup": "popup/index.html"
+  },
+  "background": {
+    "service_worker": "scripts/background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "cookies",
+    "tabCapture",
+    "offscreen",
+    "identity"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "minimum_chrome_version": "114"
+}

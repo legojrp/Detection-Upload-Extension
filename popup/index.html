@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cyber-Forensics Console</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel hero">
+        <p class="eyebrow">Discovery point capture</p>
+        <h1>Cyber-Forensics Console</h1>
+        <p class="lede">
+          Capture short-form audio and video, attach page context, and stage a secure multipart upload.
+        </p>
+        <div class="status-row">
+          <span class="status-dot"></span>
+          <span id="connectionStatus">Idle</span>
+        </div>
+      </section>
+
+      <section class="panel controls">
+        <div class="panel-header">
+          <h2>Capture controls</h2>
+          <p>Discovery-time recording with a 30 second ceiling.</p>
+        </div>
+        <button id="startCapture" class="primary">Start capture</button>
+        <button id="refreshContext" class="secondary">Refresh page context</button>
+        <dl class="kv-grid">
+          <div>
+            <dt>URL</dt>
+            <dd id="pageUrl">Waiting...</dd>
+          </div>
+          <div>
+            <dt>Title</dt>
+            <dd id="pageTitle">Waiting...</dd>
+          </div>
+          <div>
+            <dt>Timestamp</dt>
+            <dd id="pageTimestamp">Waiting...</dd>
+          </div>
+          <div>
+            <dt>Token</dt>
+            <dd id="tokenState">Not loaded</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="panel audit">
+        <div class="panel-header">
+          <h2>Audit feed</h2>
+          <p>Message flow and delivery status.</p>
+        </div>
+        <ul id="eventLog" class="log"></ul>
+      </section>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
